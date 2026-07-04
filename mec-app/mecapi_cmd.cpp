@@ -229,8 +229,8 @@ public:
         int virt = prefs_.getInt("virtual", 0);
         if (output_.create(device, virt > 0)) {
             LOG_1("MecMpeProcessor enabling for midi to " << device);
-            LOG_1("TODO (MecMpeProcessor) :");
-            LOG_1("- MPE init, including PB range");
+            // declare the MPE zone + pitch-bend range now the port is open
+            sendMPEConfig();
         }
         if (!output_.isOpen()) {
             LOG_0("MecMpeProcessor not open, so invalid for" << device);

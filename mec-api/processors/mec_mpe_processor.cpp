@@ -24,6 +24,27 @@ MPE_Processor::~MPE_Processor() {
     ;
 }
 
+void MPE_Processor::sendMPEConfig() {
+    // Tell the synth this is an MPE lower zone. Without this many synths (incl.
+    // Aalto) never route per-note channel pressure / CC74 to their expression
+    // inputs, even though the messages are being sent.
+
+    // baseChannel_ is the first member channel (index 1 == MIDI ch 2), so the
+    // MPE master channel is baseChannel_ - 1 (index 0 == MIDI ch 1).
+    unsigned masterCh = baseChannel_ - 1;
+
+    // MPE Configuration Message: CC127 on the master channel = number of member
+    // channels in the zone. This is the CC127 convention Madrona's instruments use.
+    cc(masterCh, 127, MAX_VOICE - 1);
+
+    // Pitch-bend sensitivity via RPN 0, on a member channel (applies to the zone).
+    unsigned range = static_cast<unsigned>(pitchbendRange_);
+    cc(baseChannel_, 100, 0);       // RPN LSB
+    cc(baseChannel_, 101, 0);       // RPN MSB (RPN 0 = pitch bend sensitivity)
+    cc(baseChannel_, 6, range);     // data entry MSB = range in semitones
+    cc(baseChannel_, 38, 0);        // data entry LSB
+}
+
 /////////////////////////
 // ICallback interface
 void MPE_Processor::touchOn(int id, float note, float x, float y, float z) {

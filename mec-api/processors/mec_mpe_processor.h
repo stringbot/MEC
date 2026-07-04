@@ -16,6 +16,10 @@ public:
 
     virtual void  process(MidiMsg& msg) = 0;
 
+    // send the MPE Configuration Message (zone declaration) + pitch-bend range RPN.
+    // call once after the MIDI output is open so the synth enters MPE mode.
+    void sendMPEConfig();
+
     // ICallback handling
     virtual void touchOn(int touchId, float note, float x, float y, float z);
     virtual void touchContinue(int touchId, float note, float x, float y, float z);
