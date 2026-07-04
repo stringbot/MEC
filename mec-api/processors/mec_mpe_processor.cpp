@@ -51,9 +51,14 @@ void MPE_Processor::touchOn(int id, float note, float x, float y, float z) {
     // LOG_1("   y :" << y << " my: " << my);
     // LOG_1("   z :" << z << " mz: " << mz);
 
+    // Soundplane touches start at ~zero pressure, so mz (initial z) is often 0.
+    // A Note On with velocity 0 is a Note Off per the MIDI spec, silencing the note,
+    // so floor it: dynamics still come through via Channel Pressure below.
+    unsigned vel = mz > 0 ? mz : 63;
+
     pitchbend(ch, pb);
     cc(ch, TIMBRE_CC,  my);
-    noteOn(ch, startNote, mz);
+    noteOn(ch, startNote, vel);
     // LOG_1("note on : " << startNote);
 
     voice.active_ = true;

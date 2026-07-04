@@ -1,0 +1,25 @@
+{
+    "mec"  :  {
+        "soundplane"  :  {
+            "voices" : 4,
+            "steal voices" : true,
+            "note offset" : 24
+        }
+    },
+
+    "mec-app"  :  {
+        "realtime" : true,
+        "outputs" : {
+            "console" : {
+                "throttle" : 0
+            },
+            "midi" : {
+                "mpe" : true,
+                "virtual" : 1,
+                "voices" : 4,
+                "pitchbend range" : 48.0,
+                "device" : "MEC Soundplane"
+            }
+        }
+    }
+}
