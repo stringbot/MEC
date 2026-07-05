@@ -3,7 +3,8 @@
         "soundplane"  :  {
             "voices" : 4,
             "steal voices" : true,
-            "note offset" : 24
+            "note offset" : 24,
+            "row offset" : 5
         }
     },
 

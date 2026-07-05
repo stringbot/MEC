@@ -35,7 +35,8 @@ public:
               valid_(true),
               voices_(static_cast<unsigned>(p.getInt("voices", 15))),
               stealVoices_(p.getBool("steal voices", true)),
-              noteOffset_(p.getInt("note offset", 0)) {
+              noteOffset_(p.getInt("note offset", 0)),
+              rowOffset_(p.getInt("row offset", 4)) {
         if (valid_) {
             LOG_0("SoundplaneHandler enabling for mecapi");
         }
@@ -52,7 +53,7 @@ public:
     void touchOn(unsigned voice, float x, float y, float z) override {
         unsigned ix = unsigned(x);
         unsigned iy = unsigned(y);
-        float fn = (ix + (iy * 4)) + (x -ix - 0.5f);
+        float fn = (ix + (iy * rowOffset_)) + (x -ix - 0.5f);
         float fx = (x-float(ix)-0.5f) * 2.0f;
         float fy = (y-float(iy)-0.5f) * 2.0f;
         float fz = z;
@@ -63,7 +64,7 @@ public:
     void touchContinue(unsigned voice, float x,float y, float z) override {
         unsigned ix = unsigned(x);
         unsigned iy = unsigned(y);
-        float fn = (ix + (iy * 4)) + (x -ix + 0.5f);
+        float fn = (ix + (iy * rowOffset_)) + (x -ix + 0.5f);
         float fx = (x-float(ix)-0.5f) * 2.0f;
         float fy = (y-float(iy)-0.5f) * 2.0f;
         float fz = z;
@@ -75,7 +76,7 @@ public:
     void touchOff(unsigned voice, float x,float y, float z) override {
         unsigned ix = unsigned(x);
         unsigned iy = unsigned(y);
-        float fn = (ix + (iy * 4)) + (x -ix + 0.5f);
+        float fn = (ix + (iy * rowOffset_)) + (x -ix + 0.5f);
         float fx = (x-float(ix)-0.5f) * 2.0f;
         float fy = (y-float(iy)-0.5f) * 2.0f;
         float fz = 0.0f; //z;
@@ -172,6 +173,7 @@ private:
     bool valid_;
     bool stealVoices_;
     int noteOffset_;
+    int rowOffset_; // semitones added per lane/row (4 = major third, 5 = perfect fourth)
     std::set<unsigned> stolenTouches_;
 };
 
