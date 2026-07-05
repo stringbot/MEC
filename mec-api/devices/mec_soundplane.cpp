@@ -4,6 +4,7 @@
 #include "mec_log.h"
 #include "../mec_voice.h"
 #include <set>
+// #include "../mec-utils/mec_log.h"
 
 namespace mec {
 
@@ -28,12 +29,22 @@ public:
 ////////////////////////////////////////////////
 class SoundplaneHandler : public ::SPLiteCallback {
 public:
+    // these are used to adjust velocity, they are highly dependent on hardware, to get the right feel, experiment!
+    static constexpr float V_COUNT = 2; // samples to use for velocity , lets try 2-N,  (was 4)
+    static constexpr float V_SCALE_AMT = 8.0f; // scale, to help V_COUNT pressures, quickly = max vel.  (was 4.0)
+    static constexpr float V_CURVE_AMT = 4.0f; // a pow scaling, 1.0 = linear, < 1.0 = more sensitive,  > 1.0 = less sensitive (more firm pressure)  (was 4.0)
+
     SoundplaneHandler(Preferences &p, 
 		    ICallback& cb)
             : prefs_(p),
               callback_(cb),
               valid_(true),
-              voices_(static_cast<unsigned>(p.getInt("voices", 15))),
+              voices_(
+                static_cast<unsigned>(p.getInt("voices", 15)),
+                static_cast<unsigned>(p.getInt("vel_count", V_COUNT)),
+                static_cast<float>(p.getDouble("vel_curve", V_CURVE_AMT)),
+                static_cast<float>(p.getDouble("vel_scale", V_SCALE_AMT))
+              ),
               stealVoices_(p.getBool("steal voices", true)) {
         if (valid_) {
             LOG_0("SoundplaneHandler enabling for mecapi");
@@ -125,7 +136,9 @@ public:
                 }
 
                 if (voice) {
+                    // LOG_1("calculated velocity" << touch << " ch " << voice->i_ << " vel " << voice->v_);
                     callback_.touchOn(voice->i_, mn, mx, my, voice->v_); //v_ = calculated velocity
+                    // callback_.touchOn(voice->i_, mn, mx, my, mz); //use z after velCount samples, ignore velocity
                     voice->note_ = mn;
                     voice->x_ = mx;
                     voice->y_ = my;
