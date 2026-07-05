@@ -129,24 +129,29 @@ public:
                 if (!voice && stealVoices_) {
                     // no available voices, steal?
                     Voices::Voice *stolen = voices_.oldestActiveVoice();
-                    callback_.touchOff(stolen->i_, stolen->note_, stolen->x_, stolen->y_, 0.0f);
+                    // only send touchOff if the stolen voice actually sounded (touchOn was sent)
+                    if (stolen->state_ == Voices::Voice::ACTIVE) {
+                        callback_.touchOff(stolen->i_, stolen->note_, stolen->x_, stolen->y_, 0.0f);
+                    }
                     voices_.stopVoice(stolen);
 
                     voice = voices_.startVoice(touch);
                 }
+            }
 
-                if (voice) {
-                    // LOG_1("calculated velocity" << touch << " ch " << voice->i_ << " vel " << voice->v_);
-                    callback_.touchOn(voice->i_, mn, mx, my, voice->v_); //v_ = calculated velocity
-                    // callback_.touchOn(voice->i_, mn, mx, my, mz); //use z after velCount samples, ignore velocity
-                    voice->note_ = mn;
-                    voice->x_ = mx;
-                    voice->y_ = my;
-                    voice->z_ = mz;
-                    voice->t_ = t;
+            if (voice) {
+                if (voice->state_ == Voices::Voice::PENDING) {
+                    // feed the velocity detector; defer touchOn until it has
+                    // enough pressure frames to measure the onset velocity.
+                    voices_.addPressure(voice, mz);
+                    if (voice->state_ == Voices::Voice::ACTIVE) {
+                        // LOG_1("calculated velocity" << touch << " ch " << voice->i_ << " vel " << voice->v_);
+                        callback_.touchOn(voice->i_, mn, mx, my, voice->v_); //v_ = calculated velocity
+                    }
+                    // don't send to callbacks until we have the minimum pressures for velocity
+                } else {
+                    callback_.touchContinue(voice->i_, mn, mx, my, mz);
                 }
-            } else {
-        		callback_.touchContinue(voice->i_, mn, mx, my, mz);
                 voice->note_ = mn;
                 voice->x_ = mx;
                 voice->y_ = my;
@@ -157,11 +162,11 @@ public:
         } else {
             if (voice) {
                 //LOG_1("stop voice for " << touch << " ch " << voice->i_ );
-                //msg.type_ = MecMsg::TOUCH_OFF;
-                //msg.data_.touch_.touchId_ = voice->i_;
-                //msg.data_.touch_.z_ = 0.0;
-                //queue_.addToQueue(msg);
-                callback_.touchOff(voice->i_, mn, mx, my, mz);
+                // only send touchOff if touchOn was sent (voice reached ACTIVE);
+                // a PENDING voice never sounded, so just release it.
+                if (voice->state_ == Voices::Voice::ACTIVE) {
+                    callback_.touchOff(voice->i_, mn, mx, my, mz);
+                }
                 voices_.stopVoice(voice);
             }
             stolenTouches_.erase(touch);
