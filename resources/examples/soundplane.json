@@ -2,7 +2,23 @@
     "mec"  :  {
         "soundplane"  :  {
             "steal voices" : true,
-            "voices" : 4
+            "voices" : 4,
+
+            "_comment" : "velocity mode: 'dz' = instant, from the touch trackers onset pressure slope; 'regression' = defer note-on for vel_count frames and fit a slope",
+            "velocity mode" : "dz",
+            "dz scale" : 50.0,
+            "vel_curve" : 4.0,
+
+            "_comment2" : "regression mode tuning",
+            "vel_count" : 4,
+            "vel_scale" : 4.0,
+
+            "_comment3" : "tracker z output is 0..8, scale it before the 0..1 clamp so firm presses dont saturate",
+            "pressure scale" : 1.0,
+
+            "_comment4" : "touch tracker tuning, applied at startup",
+            "touch threshold" : 0.05,
+            "lopass z" : 100.0
         }
     },
 

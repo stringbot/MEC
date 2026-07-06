@@ -10,3 +10,6 @@ target_link_libraries (t_voice mec-api )
 
 add_executable(t_surface t_surface.cpp)
 target_link_libraries (t_surface mec-api )
+
+add_executable(t_velocity t_velocity.cpp)
+target_link_libraries (t_velocity mec-api )

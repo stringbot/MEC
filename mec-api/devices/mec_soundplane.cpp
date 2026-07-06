@@ -3,25 +3,10 @@
 
 #include "mec_log.h"
 #include "../mec_voice.h"
+#include "mec_velocity.h"
 #include <set>
-// #include "../mec-utils/mec_log.h"
 
 namespace mec {
-
-class SPLiteCallback {
-public:
-    virtual ~SPLiteCallback() = default;
-    virtual void onInit()   {;}
-    virtual void onFrame()  {;}
-    virtual void onDeinit() {;}
-    virtual void onError(unsigned err, const char *errStr) {;}
-
-    virtual void touchOn(unsigned voice, float x,float y, float z) = 0;
-    virtual void touchContinue(unsigned voice, float x,float y, float z) = 0;
-    virtual void touchOff(unsigned voice, float x,float y, float z) = 0;
-};
-
-
 
 ////////////////////////////////////////////////
 // TODO
@@ -33,8 +18,9 @@ public:
     static constexpr float V_COUNT = 4; // samples to use for velocity , lets try 2-N,  (was 4)
     static constexpr float V_SCALE_AMT = 4.0f; // scale, to help V_COUNT pressures, quickly = max vel.  (was 4.0)
     static constexpr float V_CURVE_AMT = 4.0f; // a pow scaling, 1.0 = linear, < 1.0 = more sensitive,  > 1.0 = less sensitive (more firm pressure)  (was 4.0)
+    static constexpr float DZ_SCALE_AMT = 50.0f; // gain for dz velocity mode; tracker dz is ~0.005-0.05 for typical strikes
 
-    SoundplaneHandler(Preferences &p, 
+    SoundplaneHandler(Preferences &p,
 		    ICallback& cb)
             : prefs_(p),
               callback_(cb),
@@ -45,9 +31,13 @@ public:
                 static_cast<float>(p.getDouble("vel_curve", V_CURVE_AMT)),
                 static_cast<float>(p.getDouble("vel_scale", V_SCALE_AMT))
               ),
-              stealVoices_(p.getBool("steal voices", true)) {
+              stealVoices_(p.getBool("steal voices", true)),
+              velFromDz_(p.getString("velocity mode", "dz") != "regression"),
+              pressureScale_(static_cast<float>(p.getDouble("pressure scale", 1.0))),
+              dzScale_(static_cast<float>(p.getDouble("dz scale", DZ_SCALE_AMT))),
+              velCurve_(static_cast<float>(p.getDouble("vel_curve", V_CURVE_AMT))) {
         if (valid_) {
-            LOG_0("SoundplaneHandler enabling for mecapi");
+            LOG_0("SoundplaneHandler enabling for mecapi, velocity mode : " << (velFromDz_ ? "dz" : "regression"));
         }
     }
 
@@ -60,6 +50,16 @@ public:
     void onError(unsigned err, const char *errStr) override {;}
 
     void touchOn(unsigned voice, float x, float y, float z) override {
+        touchOn(voice, x, y, z, 0.0f);
+    }
+    void touchContinue(unsigned voice, float x, float y, float z) override {
+        touchContinue(voice, x, y, z, 0.0f);
+    }
+    void touchOff(unsigned voice, float x, float y, float z) override {
+        touchOff(voice, x, y, z, 0.0f);
+    }
+
+    void touchOn(unsigned voice, float x, float y, float z, float dz) override {
         unsigned ix = unsigned(x);
         unsigned iy = unsigned(y);
         float fn = (ix + (iy * 4)) + (x -ix - 0.5f);
@@ -68,9 +68,9 @@ public:
         float fz = z;
         //fprintf(stderr,"on %d %f %f %f, %f - %f %f %f \n", voice, x, y, z, fn, fx,fy,fz);
 
-        touch(true, voice, fn, fx,fy,fz);
+        touch(true, voice, fn, fx,fy,fz, dz);
     }
-    void touchContinue(unsigned voice, float x,float y, float z) override {
+    void touchContinue(unsigned voice, float x,float y, float z, float dz) override {
         unsigned ix = unsigned(x);
         unsigned iy = unsigned(y);
         float fn = (ix + (iy * 4)) + (x -ix + 0.5f);
@@ -79,10 +79,10 @@ public:
         float fz = z;
         //fprintf(stderr,"cont %d %f %f %f, %f - %f %f %f \n", voice, x, y, z, fn, fx,fy,fz);
 
-        touch(true, voice, fn, fx,fy,fz);
+        touch(true, voice, fn, fx,fy,fz, dz);
     }
 
-    void touchOff(unsigned voice, float x,float y, float z) override {
+    void touchOff(unsigned voice, float x,float y, float z, float dz) override {
         unsigned ix = unsigned(x);
         unsigned iy = unsigned(y);
         float fn = (ix + (iy * 4)) + (x -ix + 0.5f);
@@ -90,7 +90,7 @@ public:
         float fy = (y-float(iy)-0.5f) * 2.0f;
         float fz = 0.0f; //z;
         //fprintf(stderr,"off %d %f %f %f, %f - %f %f %f \n", voice, x, y, z, fn, fx,fy,fz);
-        touch(false, voice, fn, fx,fy,fz);
+        touch(false, voice, fn, fx,fy,fz, dz);
     }
 
     bool isValid() { return valid_; }
@@ -99,7 +99,7 @@ public:
 //        LOG_1(" r: " << rows << " c: " << cols);
 //    }
 
-    void touch(bool a, int itouch, float n, float x, float y, float z) {
+    void touch(bool a, int itouch, float n, float x, float y, float z, float dz) {
         static const unsigned int NOTE_CH_OFFSET = 1;
 
         unsigned touch = (unsigned) itouch;
@@ -108,7 +108,9 @@ public:
         float mn = note(fn);
         float mx = clamp(x, -1.0f, 1.0f);
         float my = clamp(y, -1.0f, 1.0f);
-        float mz = clamp(z,  0.0f, 1.0f);
+        // the touch tracker outputs z in 0..8; scale before clamping so firm
+        // presses don't saturate (pressure scale pref, e.g. 0.5 for headroom)
+        float mz = clamp(z * pressureScale_,  0.0f, 1.0f);
         unsigned long long t = 0;
 
         if (a) {
@@ -141,14 +143,23 @@ public:
 
             if (voice) {
                 if (voice->state_ == Voices::Voice::PENDING) {
-                    // feed the velocity detector; defer touchOn until it has
-                    // enough pressure frames to measure the onset velocity.
-                    voices_.addPressure(voice, mz);
-                    if (voice->state_ == Voices::Voice::ACTIVE) {
-                        // LOG_1("calculated velocity" << touch << " ch " << voice->i_ << " vel " << voice->v_);
-                        callback_.touchOn(voice->i_, mn, mx, my, voice->v_); //v_ = calculated velocity
+                    if (velFromDz_) {
+                        // the touch tracker's dz already measures the onset
+                        // pressure rise (including pre-threshold), so the note
+                        // can start immediately with no detection latency.
+                        voice->v_ = velocityFromDz(dz, dzScale_, velCurve_);
+                        voice->state_ = Voices::Voice::ACTIVE;
+                        callback_.touchOn(voice->i_, mn, mx, my, voice->v_);
+                    } else {
+                        // feed the velocity detector; defer touchOn until it has
+                        // enough pressure frames to measure the onset velocity.
+                        voices_.addPressure(voice, mz);
+                        if (voice->state_ == Voices::Voice::ACTIVE) {
+                            // LOG_1("calculated velocity" << touch << " ch " << voice->i_ << " vel " << voice->v_);
+                            callback_.touchOn(voice->i_, mn, mx, my, voice->v_); //v_ = calculated velocity
+                        }
+                        // don't send to callbacks until we have the minimum pressures for velocity
                     }
-                    // don't send to callbacks until we have the minimum pressures for velocity
                 } else {
                     callback_.touchContinue(voice->i_, mn, mx, my, mz);
                 }
@@ -182,6 +193,10 @@ private:
     Voices voices_;
     bool valid_;
     bool stealVoices_;
+    bool velFromDz_;
+    float pressureScale_;
+    float dzScale_;
+    float velCurve_;
     std::set<unsigned> stolenTouches_;
 };
 
@@ -212,6 +227,10 @@ bool Soundplane::init(void *arg) {
     std::shared_ptr<::SPLiteCallback> callback
         = std::shared_ptr<::SPLiteCallback>(new SoundplaneHandler(prefs, callback_));
     device_->addCallback(callback);
+
+    // touch tracker tuning, applied when the device starts
+    device_->touchThreshold(static_cast<float>(prefs.getDouble("touch threshold", 0.05)));
+    device_->lopassZ(static_cast<float>(prefs.getDouble("lopass z", 100.0)));
 
     device_->start();
     device_->maxTouches(maxtouch);
