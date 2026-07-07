@@ -15,7 +15,8 @@ set(MEC_VERSION_MAJOR 0)
 set(MEC_VERSION_MINOR 1)
 set(MEC_VERSION_UPDATE 1)
 set(MEC_VERSION "${MEC_VERSION_MAJOR}.${MEC_VERSION_MINOR}.${MEC_VERSION_UPDATE}")
-set(CMAKE_OSX_ARCHITECTURES "x86_64")
+# macOS builds target the host architecture (arm64 on Apple Silicon);
+# pass -DCMAKE_OSX_ARCHITECTURES=x86_64 to cross-build for Intel
 
 if(PUSH2) 
     set(DISABLE_PUSH2 0)

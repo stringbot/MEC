@@ -12,10 +12,7 @@ include_directories(
 link_directories(../../../../build/release/lib)
 
 
-set(CMAKE_OSX_ARCHITECTURES "x86_64")
-
-
-add_library( 
+add_library(
 	${PROJECT_NAME} 
 	MODULE
 	${PROJECT_NAME}.cpp
