@@ -63,6 +63,10 @@ endif (APPLE)
 
 set(CMAKE_CXX_STANDARD 11)
 
+# static vendor libs (EigenLite etc.) get linked into the shared libmec-api,
+# which fails on x86-64 linux unless everything is built position-independent
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -ffast-math -funroll-loops -fomit-frame-pointer")
 
 
