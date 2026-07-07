@@ -3,7 +3,7 @@
 	url = https://github.com/Cycling74/max-api.git
 [submodule "external/SoundplaneLite"]
 	path = external/SoundplaneLite
-	url = https://github.com/thetechnobear/SoundplaneLite
+	url = https://github.com/stringbot/SoundplaneLite
 [submodule "external/EigenLite"]
 	path = external/EigenLite
 	url = https://github.com/thetechnobear/EigenLite
