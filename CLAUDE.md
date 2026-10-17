@@ -21,6 +21,26 @@ Build outputs go to `build/release/lib` (shared libs) and `build/release/bin` (e
 
 System deps: CMake, libusb (`libusb-1.0-0-dev` / `brew install libusb`), and on Linux `libasound2-dev` + `libcairo2-dev` (cairo is also needed for Push 2). On macOS `brew install cairo`.
 
+### macOS on Apple Silicon (native arm64)
+
+`docs/BUILD.md` predates Apple Silicon and CMake 4. A native build needs:
+
+```bash
+brew install libusb cairo
+git submodule update --init --recursive
+cmake . -B build \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/libusb
+cmake --build build -j8
+```
+
+- `CMAKE_POLICY_VERSION_MINIMUM=3.5`: CMake 4.x rejects the project's old `cmake_minimum_required`.
+- `CMAKE_PREFIX_PATH`: `external/libusb/findlibusb.cmake` only searches `/usr/local` and `/opt/local`, not `/opt/homebrew`. (Its cached short-circuit path sets `LIBUSB_FOUND` while the caller checks `LIBUSB_1_FOUND`, so letting `find_path`/`find_library` locate it is the reliable route.)
+- `CMAKE_OSX_ARCHITECTURES=arm64`: `CMakeLists.txt` defaults to `x86_64` only when this is unset; without it you get a Rosetta build.
+
+On this build the console app binary is `build/release/bin/mec-app`.
+
 `mec-max` (Max/MSP external) and `mec-vst` (VST/AU) are **not** built by the top-level CMake — build them separately via their own projects. For VST, after building, copy dylibs from `build/release/lib` into `MEC.vst/Frameworks`.
 
 ### Build flags (passed as `-DFLAG=1` to cmake)
@@ -56,6 +76,22 @@ Linux needs realtime/udev setup: add `@audio` rtprio/memlock limits, add user to
 ### macOS kernel-panic caveat (important)
 
 Abruptly killing MEC on macOS corrupts the USB driver and triggers a **kernel panic**. Always shut down gracefully: send OSC `oscsend localhost 9000 /t3d/command s shutdown`, or press Ctrl-C **once** (a handler does clean shutdown — do not hammer it). This matters even when debugging in Xcode.
+
+### Soundplane → MPE synth (macOS)
+
+```bash
+./build/release/bin/mec-app mec-soundplane.json
+```
+
+`mec-soundplane.json` (repo root) takes Soundplane input and outputs to the `console` (touches printed to the terminal, the first thing to check) and to a virtual MPE MIDI port.
+
+- **Virtual port name is hardcoded** in `mec-app/midi_output.cpp`: CoreMIDI client `MEC MIDI OUTPUT`, port `MIDI OUT`. The config's `"device"` value is ignored for virtual ports, so look for "MEC MIDI OUTPUT" in the DAW/synth.
+- **MPE layout:** master channel 1, member (note) channels 2–5 with 4 voices; pitch-bend range 48.
+- **MPE zone declaration:** `MPE_Processor::sendMPEConfig()` (`mec_mpe_processor.cpp`) runs once the port opens. It sends CC127 = member count on the master channel (the convention Madrona/Aalto use, not RPN 6), then RPN 0 pitch-bend range on a member channel. Without it, synths like Aalto don't route per-note pressure/CC74 to their expression inputs.
+- **Note-on velocity:** Soundplane pressure is ~0 at first contact, and Note On with velocity 0 means Note Off, so notes were silent while pitchbend/pressure/CC74 still streamed. `mec_soundplane.cpp` holds touchOn back while the voice is PENDING, feeding pressure frames to the velocity detector in `mec_voice.h` (`Voices::addPressure`). `MPE_Processor::touchOn` also uses velocity 63 when the incoming value is 0. After note-on, dynamics come from Channel Pressure.
+- **Known issue in `mec_voice.h`:** the velocity regression seeds x=0,1 with no y values and divides by `x_` instead of the sample count, with no divide-by-zero/NaN guards. A corrected version (n = `vcount_`, guarded, plus `velocity count`/`curve`/`scale` config keys) exists upstream and should be adopted.
+- **Soundplane config keys** (`mec.soundplane` in the JSON): `voices`, `steal voices`, `note offset` (semitones, e.g. 24 = +2 octaves), `row offset` (semitones per row, default 4; 5 = fourths). The other `"note offset"` in `mec_surfacemapper.cpp` belongs to the experimental Surface API and does **not** affect the touch→MPE path.
+- **OSC t3d output** omits `/t3d/frm` frame messages (`mecapi_cmd.cpp`), so feeding Madrona t3d receivers directly may need a code change.
 
 ## Architecture
 
